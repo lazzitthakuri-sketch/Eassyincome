@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EasyPoints</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#4CAF50">
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; margin: 0; background: #f6f7fb; color: #222; }
+    header { background: #4CAF50; color: #fff; padding: 16px; text-align: center; }
+    h1 { margin: 0; font-size: 20px; }
+    main { padding: 16px; max-width: 720px; margin: 0 auto; }
+    .wallet { background: #fff; border-radius: 12px; padding: 16px; box-shadow: 0 2px 10px rgba(0,0,0,0.06); display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .balance { font-size: 22px; font-weight: bold; }
+    .task { background: #fff; border-radius: 12px; padding: 16px; box-shadow: 0 2px 10px rgba(0,0,0,0.06); margin: 12px 0; }
+    .task h3 { margin: 0 0 8px; font-size: 18px; }
+    .task p { margin: 0 0 12px; opacity: 0.85; }
+    button { border: 0; border-radius: 8px; padding: 12px 14px; font-size: 15px; cursor: pointer; }
+    .primary { background: #4CAF50; color: #fff; }
+    .muted { background: #e5e5e5; color: #333; }
+    .danger { background: #ef5350; color: #fff; }
+    .footer { text-align: center; padding: 20px; color: #777; }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; }
+    .row > * { flex: 1; min-width: 140px; }
+    .small { font-size: 12px; color: #666; }
+    .hidden { display: none; }
+
+    /* Modal */
+    .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; padding: 16px; }
+    .modal.active { display: flex; }
+    .modal-card { background: #fff; border-radius: 12px; padding: 16px; width: 100%; max-width: 420px; text-align: center; }
+    .count { font-size: 24px; font-weight: bold; margin: 6px 0 12px; }
+    a { color: #2b7dfb; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>💰 EasyPoints</h1>
+    <div class="small">Demo build — points are saved on this device only</div>
+  </header>
+
+  <main>
+    <div class="wallet">
+      <div>
+        <div>Points</div>
+        <div class="balance" id="points">0</div>
+      </div>
+      <div class="row" style="justify-content:flex-end; gap:8px;">
+        <button class="muted" id="installBtn" style="display:none;">Install App</button>
+        <button class="muted" onclick="resetDemo()">Reset</button>
+      </div>
+    </div>
+
+    <div class="task">
+      <h3>Daily Check‑In (+5)</h3>
+      <p>Check in once per day and earn 5 points.</p>
+      <button class="primary" id="checkinBtn" onclick="dailyCheckIn()">Get 5 Points</button>
+      <div class="small" id="checkinNote"></div>
+    </div>
+
+    <div class="task">
+      <h3>Watch an Ad (+10)</h3>
+      <p>This demo shows a 10‑second countdown to simulate an ad.</p>
+      <button class="primary" id="adBtn" onclick="watchAd()">Watch</button>
+      <div class="small" id="adNote"></div>
+    </div>
+
+    <div class="task">
+      <h3>Invite a Friend (+50)</h3>
+      <p>Share your app link. Reward once per day.</p>
+      <div class="row">
+        <button class="primary" id="shareBtn" onclick="inviteFriend()">Share Link</button>
+        <button class="muted" onclick="copyLink()">Copy Link</button>
+      </div>
+      <div class="small" id="shareNote"></div>
+    </div>
+
+    <div class="task">
+      <h3>Redeem Points</h3>
+      <p>Request a payout (demo). In a real app, admin verifies and pays.</p>
+      <div class="row">
+        <input type="number" id="redeemAmount" placeholder="Amount of points" style="padding:12px;border-radius:8px;border:1px solid #ccc;flex:2;">
+        <input type="email" id="redeemEmail" placeholder="Your email" style="padding:12px;border-radius:8px;border:1px solid #ccc;flex:3;">
+      </div>
+      <div style="height:10px"></div>
+      <button class="primary" onclick="redeem()">Send Request</button>
+      <div class="small">Tip: You can replace this form with a Google Form later.</div>
+    </div>
+
+    <div class="footer small">
+      © <span id="year"></span> EasyPoints • <a href="#" onclick="alert('Add your privacy policy URL here.');return false;">Privacy</a>
+    </div>
+  </main>
+
+  <!-- Ad Modal -->
+  <div id="modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-card">
+      <div id="modalTitle"><strong>Ad playing…</strong></div>
+      <div class="count"><span id="count">10</span>s</div>
+      <div class="small">Please wait to finish.</div>
+      <div style="height:10px"></div>
+      <button class="muted" onclick="closeModal()" id="closeBtn" disabled>Close</button>
+    </div>
+  </div>
+
+  <script>
+    const STORAGE_KEYS = {
+      POINTS: 'ep_points',
+      LAST_CHECKIN: 'ep_last_checkin',
+      AD_DONE_DAY: 'ep_ad_done_day',
+      SHARE_DONE_DAY: 'ep_share_done_day'
+    };
+
+    // PWA install prompt handling
+    let deferredPrompt;
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      const btn = document.getElementById('installBtn');
+      btn.style.display = 'inline-block';
+      btn.onclick = async () => {
+        btn.style.display = 'none';
+        deferredPrompt.prompt();
+        await deferredPrompt.userChoice;
+        deferredPrompt = null;
+      };
+    });
+
+    // Service worker
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(console.error);
+      });
+    }
+
+    const $ = (id) => document.getElementById(id);
+    const todayKey = () => new Date().toISOString().slice(0,10);
+
+    function getPoints() {
+      return parseInt(localStorage.getItem(STORAGE_KEYS.POINTS) || '0', 10);
+    }
+    function setPoints(v) {
+      localStorage.setItem(STORAGE_KEYS.POINTS, String(v));
+      $('points').innerText = v;
+    }
+    function addPoints(v) { setPoints(getPoints() + v); }
+
+    function dailyCheckIn() {
+      const today = todayKey();
+      const last = localStorage.getItem(STORAGE_KEYS.LAST_CHECKIN);
+      if (last === today) {
+        $('checkinNote').innerText = 'You already checked in today.';
+        $('checkinBtn').disabled = true;
+        return;
+      }
+      addPoints(5);
+      localStorage.setItem(STORAGE_KEYS.LAST_CHECKIN, today);
+      $('checkinNote').innerText = '✅ +5 points added';
+      $('checkinBtn').disabled = true;
+    }
+
+    function setupCheckIn() {
+      const today = todayKey();
+      const last = localStorage.getItem(STORAGE_KEYS.LAST_CHECKIN);
+      if (last === today) {
+        $('checkinBtn').disabled = true;
+        $('checkinNote').innerText = 'You already checked in today.';
+      } else {
+        $('checkinBtn').disabled = false;
+        $('checkinNote').innerText = '';
+      }
+    }
+
+    // Demo ad: 10-second countdown allowed once per day
+    let adTimer = null;
+    function watchAd() {
+      const today = todayKey();
+      if (localStorage.getItem(STORAGE_KEYS.AD_DONE_DAY) === today) {
+        $('adNote').innerText = 'Ad reward already claimed today.';
+        return;
+      }
+      $('modal').classList.add('active');
+      $('count').innerText = '10';
+      $('closeBtn').disabled = true;
+      let n = 10;
+      adTimer = setInterval(() => {
+        n--;
+        $('count').innerText = String(n);
+        if (n <= 0) {
+          clearInterval(adTimer);
+          addPoints(10);
+          localStorage.setItem(STORAGE_KEYS.AD_DONE_DAY, today);
+          $('adNote').innerText = '✅ +10 points added';
+          $('closeBtn').disabled = false;
+        }
+      }, 1000);
+    }
+    function closeModal() {
+      if (adTimer) clearInterval(adTimer);
+      $('modal').classList.remove('active');
+    }
+
+    async function inviteFriend() {
+      const today = todayKey();
+      if (localStorage.getItem(STORAGE_KEYS.SHARE_DONE_DAY) === today) {
+        $('shareNote').innerText = 'Share reward already claimed today.';
+        return;
+      }
+      const shareData = {
+        title: 'EasyPoints',
+        text: 'Try EasyPoints to earn rewards by doing simple tasks!',
+        url: window.location.href
+      };
+      try {
+        if (navigator.share) {
+          await navigator.share(shareData);
+          addPoints(50);
+          localStorage.setItem(STORAGE_KEYS.SHARE_DONE_DAY, today);
+          $('shareNote').innerText = '✅ +50 points added';
+        } else {
+          copyLink();
+        }
+      } catch (e) {
+        $('shareNote').innerText = 'Share canceled.';
+      }
+    }
+
+    function copyLink() {
+      const url = window.location.href;
+      navigator.clipboard?.writeText(url);
+      $('shareNote').innerText = 'Link copied. Share it and come back to claim via button.';
+    }
+
+    function redeem() {
+      const amount = parseInt($('redeemAmount').value || '0', 10);
+      const email = $('redeemEmail').value.trim();
+      if (!email || !email.includes('@')) { alert('Enter a valid email.'); return; }
+      if (amount <= 0) { alert('Enter a valid amount of points.'); return; }
+      const pts = getPoints();
+      if (amount > pts) { alert('Not enough points.'); return; }
+      setPoints(pts - amount);
+      alert('Redeem request sent (demo). Replace with your Google Form later.');
+      $('redeemAmount').value = '';
+    }
+
+    function resetDemo() {
+      if (!confirm('Reset all demo data on this device?')) return;
+      localStorage.removeItem(STORAGE_KEYS.POINTS);
+      localStorage.removeItem(STORAGE_KEYS.LAST_CHECKIN);
+      localStorage.removeItem(STORAGE_KEYS.AD_DONE_DAY);
+      localStorage.removeItem(STORAGE_KEYS.SHARE_DONE_DAY);
+      setupCheckIn();
+      setPoints(0);
+      $('adNote').innerText = '';
+      $('shareNote').innerText = '';
+      alert('Reset complete.');
+    }
+
+    // init
+    document.addEventListener('DOMContentLoaded', () => {
+      setPoints(getPoints());
+      setupCheckIn();
+      $('year').innerText = new Date().getFullYear();
+    });
+  </script>
+</body>
+</html>
