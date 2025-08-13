@@ -1,1 +1,1 @@
-# Eassyincome
+# lazzitearningapp
